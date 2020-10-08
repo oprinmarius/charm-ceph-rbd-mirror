@@ -116,3 +116,53 @@ class TestCephRBDMirrorCharm(Helper):
             'mode': 'pool',
             'peers': []}
         self.assertFalse(crmc.mirror_pool_has_peers('apool'))
+
+    def test_pools_in_broker_request(self):
+        rq = mock.MagicMock()
+        rq.api_version = 1
+        rq.ops = [{'op': 'create-pool', 'name': 'fakepool'}]
+        crmc = ceph_rbd_mirror.CephRBDMirrorCharm()
+        self.assertIn('fakepool', crmc.pools_in_broker_request(rq))
+
+    def test_collapse_and_filter_broker_requests(self):
+        self.patch_object(ceph_rbd_mirror.ch_ceph, 'CephBrokerRq')
+
+        class FakeCephBrokerRq(object):
+
+            ops = []
+
+            def add_op(self, op):
+                self.ops.append(op)
+
+        self.CephBrokerRq.side_effect = FakeCephBrokerRq
+
+        broker_requests = [
+            {
+                'api-version': 1,
+                'ops': [
+                    {
+                        'op': 'create-pool',
+                        'name': 'pool-rq0',
+                        'app-name': 'rbd',
+                    },
+                ]
+            },
+            {
+                'api-version': 1,
+                'ops': [
+                    {
+                        'op': 'create-pool',
+                        'name': 'pool-rq1',
+                        'app-name': 'notrbd',
+                    },
+                ]
+            }
+        ]
+        crmc = ceph_rbd_mirror.CephRBDMirrorCharm()
+        rq = crmc.collapse_and_filter_broker_requests(
+            broker_requests,
+            set(('create-pool',)),
+            require_vp={'app-name': 'rbd'})
+        self.assertDictEqual(
+            rq.ops[0],
+            {'app-name': 'rbd', 'name': 'pool-rq0', 'op': 'create-pool'})

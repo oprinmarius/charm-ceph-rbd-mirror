@@ -161,7 +161,11 @@ class TestCephRBDMirrorHandlers(test_utils.PatchHelper):
         endpoint_local.pools = {
             'cinder-ceph': {
                 'applications': {'rbd': {}},
-                'parameters': {'pg_num': 42, 'size': 3},
+                'parameters': {
+                    'pg_num': 42,
+                    'size': 3,
+                    'rbd-mirroring-mode': 'pool'
+                },
                 'quota': {'max_bytes': 1024, 'max_objects': 51},
             },
         }
@@ -170,15 +174,26 @@ class TestCephRBDMirrorHandlers(test_utils.PatchHelper):
                                                endpoint_remote]
         self.crm_charm.eligible_pools.return_value = endpoint_local.pools
         self.crm_charm.mirror_pool_enabled.return_value = False
+
         handlers.configure_pools()
         self.endpoint_from_flag.assert_has_calls([
             mock.call('ceph-local.available'),
             mock.call('ceph-remote.available'),
         ])
+        rq = self.crm_charm.collapse_and_filter_broker_requests(
+            endpoint_local.broker_requests, set(('create-pool',)),
+            require_vp={'app-name': 'rbd'})
+        remote_rq = self.crm_charm.collapse_and_filter_broker_requests(
+            endpoint_remote.broker_requests, set(('create-pool',)),
+            require_vp={'app-name': 'rbd'})
+        self.crm_charm.pool_mirroring_mode.assert_called_once_with(
+            'cinder-ceph', [rq, remote_rq])
+        pool_mirroring_mode = self.crm_charm.pool_mirroring_mode(
+            'cinder-ceph', [rq, remote_rq])
         self.crm_charm.eligible_pools.assert_called_once_with(
             endpoint_local.pools)
         self.crm_charm.mirror_pool_enabled.assert_called_once_with(
-            'cinder-ceph')
+            'cinder-ceph', pool_mirroring_mode)
         self.crm_charm.mirror_pool_enable.assert_called_once_with(
-            'cinder-ceph')
+            'cinder-ceph', pool_mirroring_mode)
         endpoint_remote.maybe_send_rq.assert_called_once_with(mock.ANY)

@@ -193,7 +193,7 @@ class CephRBDMirrorCharm(charms_openstack.plugins.CephCharm):
         """
         default_mirroring_mode = 'pool'
         for rq in broker_requests:
-            if not isinstance(rq, ch_ceph.CephBrokerRq):
+            if not rq:
                 continue
             assert rq.api_version == 1
             for op in rq.ops:
